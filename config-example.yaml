@@ -1,5 +1,7 @@
 # Please copy this example config to config.yaml
 # and adjust it to your needs.
+# Most config values have sane defaults! This example is more verbose than it needs to be,
+# your config only needs to override what you want to change.
 
 # This is useful to differentiate multiple chiadog
 # instances monitoring multiple harvesters
@@ -25,13 +27,43 @@ chia_logs:
 keep_alive_monitor:
   enable_remote_ping: false
   ping_url: ''
+  # These thresholds determine how long a service can be unhealthy,
+  # before we trigger a high priority alert.
+  # The lowest value here determines how often the keep-alive checks run,
+  # and thus how often a notification for an unhealthy service will trigger!
+  notify_threshold_seconds:
+    FULL_NODE: 300
+    HARVESTER: 300
+    FARMER: 300
+    WALLET: 300
 
 # Enable this and you'll receive a daily summary notification
 # on your farm performance at the specified time of the day.
 daily_stats:
-  enable: true
+  enable: true # default: false
   time_of_day: "21:00"
   frequency_hours: 24
+
+# Remove any service your node isn't running. All are enabled by default.
+# Services listed here are checked for health and will start alerting if missing.
+monitored_services:
+  - FULL_NODE
+  - HARVESTER
+  - FARMER
+  - WALLET
+
+# In this section you can configure log handler details
+handlers:
+  wallet_added_coin_handler:
+    # Transactions with lower amount mojos will be ignored
+    # Use this to avoid notification spam during dust storms
+    min_mojos_amount:  5 # default: 0
+  wallet_peak_handler:
+    # Observed wallet delay is usually about a minute on a beefy node but
+    # you may need to experiment to find what's normal for you.
+    # If the delay is consistently over this for the WALLET notify_threshold_seconds value, the keep-alive triggers.
+    max_drift_seconds: 300
+
 
 # We support a lot of notifiers, please check the README for more
 # information. You can delete the sections which you aren't using.
@@ -39,11 +71,25 @@ daily_stats:
 # notifications to each of them. E.g. enable daily_stats only to E-mail.
 # If you enable wallet_events you'll get notifications anytime your
 # wallet receives some XCH (e.g. farming reward).
+#
+# NOTE: No notifier is enabled by default, and all notification topics are disabled by default.
+# You'll need to enable the notifiers and topics that you want to see!
 notifier:
   pushover:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
+    credentials:
+      api_token: 'dummy_token'
+      user_key: 'dummy_key'
+  pushcut:
+    enable: false
+    daily_stats: true
+    wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     credentials:
       api_token: 'dummy_token'
       user_key: 'dummy_key'
@@ -51,6 +97,8 @@ notifier:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     credentials:
       bot_token: 'dummy_bot_token'
       chat_id: 'dummy_chat_id'
@@ -58,37 +106,48 @@ notifier:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     credentials:
       sender: 'chia@example.com'
       sender_name: 'chiadog'
       recipient: 'you@example.com'
       username_smtp: 'username'
       password_smtp: 'password'
+      enable_smtp_auth: true
       host: 'smtp.example.com'
       port: 587
   script:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     script_path: 'tests/test_script.sh'
   discord:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     credentials:
       webhook_url: 'https://discord.com/api/webhooks/...'
   slack:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     credentials:
       webhook_url: 'https://hooks.slack.com/services/...'
   mqtt:
     enable: false
     daily_stats: true
     wallet_events: true
+    decreasing_plot_events: true
+    increasing_plot_events: false
     topic: chia/chiadog/alert
-    qos: 1
+    qos: 1 # default: 0
     retain: false
     credentials:
       host: '192.168.0.10'
@@ -102,3 +161,12 @@ notifier:
       api_token: ''
       dashboard_id: -1
       panel_id: -1
+  ifttt:
+    enable: false
+    daily_stats: false
+    wallet_events: false
+    decreasing_plot_events: true
+    increasing_plot_events: false
+    credentials:
+      api_token: 'dummy_token'
+      webhook_name: 'dummy_key'

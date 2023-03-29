@@ -7,6 +7,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List
 from enum import Enum
+import logging
+
+# lib
+import confuse
+from confuse import ConfigView
 
 
 class EventPriority(Enum):
@@ -29,6 +34,8 @@ class EventType(Enum):
     KEEPALIVE = 0
     USER = 1
     DAILY_STATS = 2
+    PLOTDECREASE = 3
+    PLOTINCREASE = 4
 
 
 class EventService(Enum):
@@ -41,6 +48,15 @@ class EventService(Enum):
     FULL_NODE = 2
     DAILY = 3
     WALLET = 4
+
+    @classmethod
+    def _missing_(cls, value):
+        """Allow init with a string representation of the service"""
+
+        names = [s.name.lower() for s in EventService]
+        if isinstance(value, str) and value.lower() in names:
+            return cls(names.index(value.lower()))
+        return super()._missing_(value)
 
 
 @dataclass
@@ -58,21 +74,29 @@ class Notifier(ABC):
     Pushover, E-mail, Slack, WhatsApp, etc
     """
 
-    def __init__(self, title_prefix: str, config: dict):
+    def __init__(self, title_prefix: str, config: ConfigView):
         self._title_prefix = title_prefix
         self._config = config
         self._conn_timeout_seconds = 10
         self._notification_types = [EventType.USER]
         self._notification_services = [EventService.HARVESTER, EventService.FARMER, EventService.FULL_NODE]
 
-        daily_stats = config.get("daily_stats", False)
-        wallet_events = config.get("wallet_events", False)
-
+        try:
+            daily_stats = config["daily_stats"].get(bool)
+        except confuse.exceptions.NotFoundError:
+            logging.debug(f"Not initializing daily_stats for {__name__}, not supported")
+        wallet_events = config["wallet_events"].get(bool)
+        decreasing_plot_events = config["decreasing_plot_events"].get(bool)
+        increasing_plot_events = config["increasing_plot_events"].get(bool)
         if daily_stats:
             self._notification_types.append(EventType.DAILY_STATS)
             self._notification_services.append(EventService.DAILY)
         if wallet_events:
             self._notification_services.append(EventService.WALLET)
+        if decreasing_plot_events:
+            self._notification_types.append(EventType.PLOTDECREASE)
+        if increasing_plot_events:
+            self._notification_types.append(EventType.PLOTINCREASE)
 
     def get_title_for_event(self, event):
         icon = ""

@@ -11,10 +11,23 @@ enable more than one at the same time - please refer to the [config-example.yaml
 from the Pushover app to overwrite any Silence or Do-Not-Disturb modes on your phone and sound a loud alarm at any time
 of the day to make you aware of any issues in a timely manner.
 
+To test live:
+
+```
+rm tests/cassette/pushover_notifier/*
+PUSHOVER_API_TOKEN=<api_token> PUSHOVER_USER_KEY=<user_key> python3 -m unittest tests.notifier.test_pushover_notifier
+```
+
+## Pushcut
+
+[Pushcut](https://pushcut.io/) is available for both Android and iOS. High priority notifications can be configured
+from the Pushcut app to overwrite any Silence or Do-Not-Disturb modes on your phone and sound a loud alarm at any time
+of the day to make you aware of any issues in a timely manner.
+
 Test with:
 
 ```
-PUSHOVER_API_TOKEN=<api_token> PUSHOVER_USER_KEY=<user_key> python3 -m unittest tests.notifier.test_pushover_notifier
+PUSHCUT_API_TOKEN=<api_token> PUSHCUT_NOTIFICATION_NAME=<notification_name> python3 -m unittest tests.notifier.test_pushcut_notifier
 ```
 
 ## SMTP / E-Mail
@@ -26,7 +39,15 @@ verify the sender email.
 Test with:
 
 ```
-SENDER="sender@example.com" SENDER_NAME="ChiaDog" RECIPIENT="you@example.com" HOST=smtp.example.com PORT=587 USERNAME_SMTP=username PASSWORD_SMTP=password python3 -m unittest tests.notifier.test_smtp_notifier
+SMTP_SENDER="sender@example.com" \
+SMTP_SENDER_NAME="ChiaDog" \
+SMTP_RECIPIENT="you@example.com" \
+SMTP_HOST=smtp.example.com \
+SMTP_PORT=587 \
+SMTP_ENABLE_AUTH=true \
+SMTP_USERNAME=username \
+SMTP_PASSWORD=password \
+python3 -m unittest tests.notifier.test_smtp_notifier
 ```
 
 ## Slack
@@ -101,7 +122,7 @@ Messages sent to the MQTT topic look like this:
 Test with:
 
 ```
-HOST=<hostname> PORT=<port> TOPIC=<mqtt_topic> python3 -m unittest tests.notifier.test_mqtt_notifier 
+MQTT_HOST=<hostname> MQTT_PORT=<port> MQTT_TOPIC=<mqtt_topic> python3 -m unittest tests.notifier.test_mqtt_notifier 
 ```
 
 Or with full parameters:
@@ -133,6 +154,16 @@ Test with:
 
 ```
 GRAFANA_BASE_URL=<webhook_url> GRAFANA_API_TOKEN=<api_token> python3 -m unittest tests.notifier.test_grafana_notifier
+```
+
+## Ifttt
+
+[Ifttt](https://ifttt.com/) is available for both Android and iOS. Can be used to send push notifications and to integrate with various other APIs.  For example if you wanted to flash a Philips hue lightbulb when you have a Chiadog notification.
+
+Test with:
+
+```
+IFTTT_API_TOKEN=<api_token> IFTTT_WEBHOOK_NAME=<user_key> python3 -m unittest tests.notifier.test_ifttt_notifier
 ```
 
 ## Unit Testing on Windows

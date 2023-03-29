@@ -1,7 +1,10 @@
 # std
 import logging
 import time
-from typing import List, Dict
+from typing import List, Dict, Type
+
+# lib
+from confuse import ConfigView
 
 # project
 from . import Event, Notifier
@@ -9,12 +12,13 @@ from .grafana_notifier import GrafanaNotifier
 from .keep_alive_monitor import KeepAliveMonitor
 from .mqtt_notifier import MqttNotifier
 from .pushover_notifier import PushoverNotifier
+from .pushcut_notifier import PushcutNotifier
 from .script_notifier import ScriptNotifier
 from .smtp_notifier import SMTPNotifier
 from .telegram_notifier import TelegramNotifier
 from .discord_notifier import DiscordNotifier
 from .slack_notifier import SlackNotifier
-from src.config import Config
+from .ifttt_notifier import IftttNotifier
 
 
 class NotifyManager:
@@ -23,17 +27,18 @@ class NotifyManager:
     delivered to multiple services at once.
     """
 
-    def __init__(self, config: Config, keep_alive_monitor: KeepAliveMonitor):
+    def __init__(self, config: ConfigView, keep_alive_monitor: KeepAliveMonitor):
         self._keep_alive_monitor = keep_alive_monitor
         self._keep_alive_monitor.set_notify_manager(self)
         self._notifiers: Dict[str, Notifier] = {}
-        self._config = config.get_notifier_config()
-        self._notification_title_prefix = config.get_config()["notification_title_prefix"]
+        self._config = config["notifier"]
+        self._notification_title_prefix = config["notification_title_prefix"].get(str)
         self._initialize_notifiers()
 
-    def _initialize_notifiers(self):
-        key_notifier_mapping = {
+    def _initialize_notifiers(self) -> None:
+        key_notifier_mapping: Dict[str, Type[Notifier]] = {
             "pushover": PushoverNotifier,
+            "pushcut": PushcutNotifier,
             "script": ScriptNotifier,
             "telegram": TelegramNotifier,
             "discord": DiscordNotifier,
@@ -41,11 +46,12 @@ class NotifyManager:
             "slack": SlackNotifier,
             "mqtt": MqttNotifier,
             "grafana": GrafanaNotifier,
+            "ifttt": IftttNotifier,
         }
-        for key in self._config.keys():
+        for key in self._config:
             if key not in key_notifier_mapping.keys():
                 logging.warning(f"Cannot find mapping for {key} notifier.")
-            if self._config[key]["enable"]:
+            if self._config[key]["enable"].get(bool):
                 self._notifiers[key] = key_notifier_mapping[key](
                     title_prefix=self._notification_title_prefix, config=self._config[key]
                 )

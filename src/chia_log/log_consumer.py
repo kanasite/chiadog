@@ -10,20 +10,35 @@ The latter has not been implemented yet. Feel free to add it.
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path, PurePosixPath, PureWindowsPath, PurePath
+from tempfile import mkdtemp
 from threading import Thread
 from time import sleep
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 # project
-from src.config import Config
-from src.config import check_keys
 from src.util import OS
 
 # lib
 import paramiko
+import confuse
+from confuse import ConfigView
 from paramiko.channel import ChannelStdinFile, ChannelStderrFile, ChannelFile
 from pygtail import Pygtail  # type: ignore
 from retry import retry
+
+
+# Define the minimum valid 'chia_logs' config sections as needed by the log consumers
+file_log_consumer_template = {
+    "enable": bool,
+    "file_path": confuse.Path(),
+}
+network_log_consumer_template = {
+    "enable": bool,
+    "remote_file_path": confuse.Path(),
+    "remote_host": str,
+    "remote_user": str,
+    "remote_port": int,
+}
 
 
 class LogConsumerSubscriber(ABC):
@@ -56,9 +71,9 @@ class LogConsumer(ABC):
 class FileLogConsumer(LogConsumer):
     def __init__(self, log_path: Path):
         super().__init__()
-        logging.info("Enabled local file log consumer.")
         self._expanded_log_path = str(log_path.expanduser())
-        self._offset_path = Config.get_log_offset_path()
+        self._offset_path = mkdtemp() / Path("debug.log.offset")
+        logging.debug(f"Using temporary directory {self._offset_path} for FileLogConsumer")
         self._is_running = True
         self._thread = Thread(target=self._consume_loop)
         self._thread.start()
@@ -66,6 +81,12 @@ class FileLogConsumer(LogConsumer):
 
     def stop(self):
         logging.info("Stopping")
+
+        # Cleanup the temporary file
+        if self._offset_path.exists():
+            logging.debug(f"Deleting {self._offset_path}")
+            self._offset_path.unlink()
+
         self._is_running = False
 
     @retry((FileNotFoundError, PermissionError), delay=2)
@@ -173,7 +194,6 @@ class WindowsNetworkLogConsumer(NetworkLogConsumer):
 
 
 def get_host_info(host: str, user: str, path: str, port: int) -> Tuple[OS, PurePath]:
-
     client = paramiko.client.SSHClient()
     client.load_system_host_keys()
     client.connect(hostname=host, username=user, port=port)
@@ -194,58 +214,55 @@ def get_host_info(host: str, user: str, path: str, port: int) -> Tuple[OS, PureP
     return OS.LINUX, PurePosixPath(path)
 
 
-def create_log_consumer_from_config(config: dict) -> Optional[LogConsumer]:
+def create_log_consumer_from_config(config: ConfigView) -> LogConsumer:
     enabled_consumer = None
     for consumer in config.keys():
-        if config[consumer]["enable"]:
+        if config[consumer]["enable"].get(bool):
             if enabled_consumer:
                 logging.error("Detected multiple enabled consumers. This is unsupported configuration!")
                 return None
             enabled_consumer = consumer
     if enabled_consumer is None:
-        logging.error("Couldn't find enabled log consumer in config.yaml")
-        return None
+        logging.critical("Couldn't find enabled log consumer in config.yaml")
+        exit(1)
 
     enabled_consumer_config = config[enabled_consumer]
 
     if enabled_consumer == "file_log_consumer":
-        if not check_keys(required_keys=["file_path"], config=enabled_consumer_config):
-            return None
-
-        return FileLogConsumer(log_path=Path(enabled_consumer_config["file_path"]))
+        # Validate config against template
+        valid_config = enabled_consumer_config.get(file_log_consumer_template)
+        log_path = valid_config["file_path"]
+        logging.info(f"Consuming logs locally from {log_path}")
+        return FileLogConsumer(log_path=log_path)
 
     if enabled_consumer == "network_log_consumer":
-        if not check_keys(
-            required_keys=["remote_file_path", "remote_host", "remote_user"], config=enabled_consumer_config
-        ):
-            return None
+        # Validate config against template
+        valid_config = enabled_consumer_config.get(network_log_consumer_template)
+        remote_port = valid_config["remote_port"]
+        remote_user = valid_config["remote_user"]
+        remote_host = valid_config["remote_host"]
+        remote_path = valid_config["remote_file_path"]
 
-        # default SSH Port : 22
-        remote_port = enabled_consumer_config.get("remote_port", 22)
+        logging.info(f"Consuming logs remotely from {remote_user}@{remote_host}:{remote_port}:{remote_path}")
 
-        platform, path = get_host_info(
-            enabled_consumer_config["remote_host"],
-            enabled_consumer_config["remote_user"],
-            enabled_consumer_config["remote_file_path"],
-            remote_port,
-        )
+        platform, path = get_host_info(remote_host, remote_user, remote_path, remote_port)
 
         if platform == OS.WINDOWS:
             return WindowsNetworkLogConsumer(
                 remote_log_path=path,
-                remote_host=enabled_consumer_config["remote_host"],
-                remote_user=enabled_consumer_config["remote_user"],
+                remote_host=valid_config["remote_host"],
+                remote_user=valid_config["remote_user"],
                 remote_port=remote_port,
                 remote_platform=platform,
             )
         else:
             return PosixNetworkLogConsumer(
                 remote_log_path=path,
-                remote_host=enabled_consumer_config["remote_host"],
-                remote_user=enabled_consumer_config["remote_user"],
+                remote_host=valid_config["remote_host"],
+                remote_user=valid_config["remote_user"],
                 remote_port=remote_port,
                 remote_platform=platform,
             )
 
-    logging.error("Unhandled consumer type")
-    return None
+    logging.critical("Unknown log consumer type enabled, typo?")
+    exit(1)
