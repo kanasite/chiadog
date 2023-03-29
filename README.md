@@ -1,3 +1,5 @@
+[![Docker image](https://github.com/kanasite/chiadog/actions/workflows/publish-image.yml/badge.svg?branch=main)](https://github.com/kanasite/chiadog/actions/workflows/publish-image.yml)
+
 <p align="center">
     <img src="./docs/logo.jpg" />
 </p>
